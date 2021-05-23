@@ -53,7 +53,7 @@ jobs:
 
       - name: Merge ipa
         run: |
-          cat ${{ env.appName }}.ipa.* > ${{ env.appName }}.ipa
+          cat ${{ env.appName }}.ipa.* > ${{ runner.temp }}/${{ env.appName }}.ipa
           rm ${{ env.appName }}.ipa.*
 
       - name: Decrypt binary
