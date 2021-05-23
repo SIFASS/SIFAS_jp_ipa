@@ -61,7 +61,7 @@ jobs:
           DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
           DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
         run: |
-          python3 workflow_helper\iTunesDownload\decrypt_binary.py ${{ runner.temp }}\${{ env.appName }}.ipa ${{ runner.temp }}\${{ env.appName }}.sinf
+          python3 workflow_helper/iTunesDownload/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa ${{ runner.temp }}/${{ env.appName }}.sinf
 
       # - name: Pushing to release
       #   if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
