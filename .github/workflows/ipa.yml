@@ -6,6 +6,7 @@ env:
   appStore: "jp"
   appName: "allstars"
   PYTHONIOENCODING: utf-8
+  GIT_SSH_COMMAND: 'ssh -i $HOME/.ssh/ssh.key'
 
 on: 
   push:
@@ -123,8 +124,11 @@ jobs:
           branch: ${{ github.ref }}
 
   binary_decrypt:
+    if: ${{ needs.ipa_update.steps.check.outputs.NEED_UPDATE == 1 }}
     name: 'Decrypt Binary'
     runs-on: "ubuntu-20.04"
+    needs:
+      - ipa_update
     steps:
       - name: Set up git repository
         uses: actions/checkout@v2
@@ -170,4 +174,33 @@ jobs:
           DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
           DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
         run: |
-          python3 workflow_helper/iTunesDownload/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa ${{ runner.temp }}/${{ env.appName }}.sinf
+          python3 workflow_helper/iTunesDownload/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa ${{ env.appName }}.sinf
+
+      - name: Setup SSH Key
+        env:
+          SSHK: ${{ secrets.SIFASS_KEY }}
+        run: |
+          mkdir -p $HOME/.ssh
+          ssh-keyscan -H gitlab.com > $HOME/.ssh/known_hosts
+          echo "$SSHK" > $HOME/.ssh/ssh.key
+          chmod 600 $HOME/.ssh/ssh.key
+
+      - name: Set up gitlab repository
+        run: |
+          git clone git@gitlab.com:SIFASS/SIFAS_jp_bin.git "$(pwd)/SIFAS_jp_bin"
+
+      - name: Commit binary file
+        run: |
+          cd "$(pwd)/SIFAS_jp_bin"
+          cp ../${{ env.appName }} .
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git lfs install
+          git lfs track
+          git add ${{ env.appName }}
+          git commit -m "Decrypted binary for version ${{ env.LATEST_VERSION }}"
+        shell: bash
+
+      - name: Push changes
+        run: |
+          git push
