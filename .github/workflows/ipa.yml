@@ -121,3 +121,53 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref }}
+
+  binary_decrypt:
+    name: 'Decrypt Binary'
+    runs-on: "ubuntu-20.04"
+    steps:
+      - name: Set up git repository
+        uses: actions/checkout@v2
+
+      - name: Get branch name
+        run: |
+          echo "LATEST_VERSION=$(cat curver.txt)" >> $GITHUB_ENV
+
+      - id: download-ipa-000
+        name: Download ipa 000
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          version: tags/${{ env.appName }}-${{ env.LATEST_VERSION }}
+          file: ${{ env.appName }}.ipa.000
+          target: ${{ env.appName }}.ipa.000
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: download-ipa-001
+        name: Download ipa 001
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          version: tags/${{ env.appName }}-${{ env.LATEST_VERSION }}
+          file: ${{ env.appName }}.ipa.001
+          target: ${{ env.appName }}.ipa.001
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: download-sinf
+        name: Download sinf
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          version: tags/${{ env.appName }}-${{ env.LATEST_VERSION }}
+          file: ${{ env.appName }}.sinf
+          target: ${{ env.appName }}.sinf
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge ipa
+        run: |
+          cat ${{ env.appName }}.ipa.* > ${{ runner.temp }}/${{ env.appName }}.ipa
+          rm ${{ env.appName }}.ipa.*
+
+      - name: Decrypt binary
+        env:
+          DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
+          DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
+        run: |
+          python3 workflow_helper/iTunesDownload/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa ${{ runner.temp }}/${{ env.appName }}.sinf
