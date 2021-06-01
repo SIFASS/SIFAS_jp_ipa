@@ -3,7 +3,8 @@ name: Download IPA
 
 env:
   appUrl: "https://apps.apple.com/jp/app/id1377018522"
-  appStore: "jp"
+  appBundleId: "com.klab.lovelive.allstars"
+  appStore: "JP"
   appName: "allstars"
   PYTHONIOENCODING: utf-8
   GIT_SSH_COMMAND: 'ssh -i $HOME/.ssh/ssh.key'
@@ -20,15 +21,24 @@ on:
 jobs:
   ipa_update:
     name: 'Update IPA'
-    runs-on: "windows-latest"
+    runs-on: "ubuntu-latest"
+    outputs:
+      NEED_UPDATE: ${{ steps.check.outputs.NEED_UPDATE }}
     steps:
       - name: Set up git repository
         uses: actions/checkout@v2
+      - name: Install NyaMisty/ipatool-py
+        run: |
+            git clone https://github.com/NyaMisty/ipatool-py
+            pip3 install -r ipatool-py/requirements.txt
+      #- name: Setup tmate session
+      #  uses: mxschmitt/action-tmate@v3
+
       - name: Pre check version
         id: check
         run: |
             pip3 install requests
-            if python3 workflow_helper/iTunesDownload/precheck_version.py ${{ env.appStore }} ${{ env.appUrl }}; then
+            if python3 workflow_helper/precheck_version.py ${{ env.appStore }} ${{ env.appBundleId }}; then
                 echo "Version updated! Continue to download!"
                 echo '::set-output name=NEED_UPDATE::1'
             else
@@ -36,45 +46,25 @@ jobs:
                 echo '::set-output name=NEED_UPDATE::0'
             fi
         shell: bash
-        
-      - name: Setup iTunes
-        if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
-        run: |
-          echo ${{ steps.check.outputs.NEED_UPDATE }}
-          workflow_helper\iTunesInstall\install_itunes.bat
-        
-      - name: Login iTunes
+      
+      - name: Download ipa
         if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
         env:
           APPLEID: ${{ secrets.APPLEID }}
           APPLEID_PWD: ${{ secrets.APPLEID_PWD }}
         run: |
-            pip3 install pywinauto
-            python3 workflow_helper/itunes_auto_login.py %APPLEID% %APPLEID_PWD%
-        shell: cmd
-      
-      - name: Download ipa
-        if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
-        run: |
-            pip3 install frida
-            python3 workflow_helper\iTunesDownload\download_ipa.py ${{ env.appStore }} ${{ env.appUrl }} ${{ env.appName }}
-            mkdir ${{ runner.temp }}\ipaDown
-            move *.ipa ${{ runner.temp }}\ipaDown
-            move *.sinf ${{ runner.temp }}\ipaDown
-      #- uses: NyaMisty/reverse-rdp-windows-github-actions@master
-      #  if: ${{ always() }}
-      #  with:
-      #    ngrok-token: ${{ secrets.NGROK_AUTH_TOKEN }}
-      #    password: Aa123456
+            python3 workflow_helper/download_ipa.py ${{ env.appStore }} ${{ env.appBundleId }} $APPLEID $APPLEID_PWD
+            mkdir ${{ runner.temp }}/ipaDown
+            mv *.ipa ${{ runner.temp }}/ipaDown/${{ env.appName }}.ipa
       #- name: "Upload package"
       #  uses: actions/upload-artifact@v2
       #  with:
       #    name: ${{ env.appName }}.ipa
-      #    path: ${{ runner.temp }}\ipaDown\${{ env.appName }}.ipa
+      #    path: ${{ runner.temp }}/ipaDown/${{ env.appName }}.ipa
       - name: Split ipa
         if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
         run: split --bytes=1879048192 --suffix-length=3 --numeric-suffix ${{ env.appName }}.ipa ${{ env.appName }}.ipa.
-        working-directory: ${{ runner.temp }}\ipaDown
+        working-directory: ${{ runner.temp }}/ipaDown
         shell: bash
       - name: Get current version
         if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
@@ -95,7 +85,7 @@ jobs:
       #- name: Pushing to release
       #  uses: softprops/action-gh-release@v1
       #  with:
-      #    files: ${{ runner.temp }}\ipaDown\${{ env.appName }}.ipa.*
+      #    files: ${{ runner.temp }}/ipaDown/${{ env.appName }}.ipa.*
       #    tag_name: "${{ env.appName }}-${{ steps.curver.outputs.curver }}"
       #  env:
       #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,7 +96,7 @@ jobs:
           name: "${{ env.appName }}-${{ steps.curver.outputs.curver }}"
           commit: ${{ github.sha }}
           tag: "${{ env.appName }}-${{ steps.curver.outputs.curver }}"
-          artifacts: ${{ runner.temp }}\ipaDown\${{ env.appName }}.ipa.*,${{ runner.temp }}\ipaDown\${{ env.appName }}.sinf
+          artifacts: ${{ runner.temp }}/ipaDown/${{ env.appName }}.ipa.*
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit ver change
         if: ${{ steps.check.outputs.NEED_UPDATE == 1 }}
@@ -124,7 +114,7 @@ jobs:
           branch: ${{ github.ref }}
 
   binary_decrypt:
-    if: ${{ needs.ipa_update.steps.check.outputs.NEED_UPDATE == 1 }}
+    if: ${{ needs.ipa_update.outputs.NEED_UPDATE == 1 }}
     name: 'Decrypt Binary'
     runs-on: "ubuntu-20.04"
     needs:
@@ -132,16 +122,18 @@ jobs:
     steps:
       - name: Set up git repository
         uses: actions/checkout@v2
-
-      - name: Get branch name
-        run: |
-          echo "LATEST_VERSION=$(cat curver.txt)" >> $GITHUB_ENV
+      - name: Update git
+        run: git pull origin master
+      
+      - name: Get current version
+        id: version
+        run: echo "::set-output name=version::$(cat curver.txt)"
 
       - id: download-ipa-000
         name: Download ipa 000
         uses: dsaltares/fetch-gh-release-asset@master
         with:
-          version: tags/${{ env.appName }}-${{ env.LATEST_VERSION }}
+          version: tags/${{ env.appName }}-${{ steps.version.outputs.version }}
           file: ${{ env.appName }}.ipa.000
           target: ${{ env.appName }}.ipa.000
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -150,18 +142,9 @@ jobs:
         name: Download ipa 001
         uses: dsaltares/fetch-gh-release-asset@master
         with:
-          version: tags/${{ env.appName }}-${{ env.LATEST_VERSION }}
+          version: tags/${{ env.appName }}-${{ steps.version.outputs.version }}
           file: ${{ env.appName }}.ipa.001
           target: ${{ env.appName }}.ipa.001
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: download-sinf
-        name: Download sinf
-        uses: dsaltares/fetch-gh-release-asset@master
-        with:
-          version: tags/${{ env.appName }}-${{ env.LATEST_VERSION }}
-          file: ${{ env.appName }}.sinf
-          target: ${{ env.appName }}.sinf
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge ipa
@@ -174,7 +157,7 @@ jobs:
           DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
           DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
         run: |
-          python3 workflow_helper/iTunesDownload/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa ${{ env.appName }}.sinf
+          python3 workflow_helper/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa
 
       - name: Setup SSH Key
         env:
@@ -189,7 +172,7 @@ jobs:
         run: |
           git clone git@gitlab.com:SIFASS/SIFAS_jp_bin.git "$(pwd)/SIFAS_jp_bin"
 
-      - name: Commit binary file
+      - name: Commit binary file & Push
         run: |
           cd "$(pwd)/SIFAS_jp_bin"
           cp ../${{ env.appName }} .
@@ -198,9 +181,6 @@ jobs:
           git lfs install
           git lfs track
           git add ${{ env.appName }}
-          git commit -m "Decrypted binary for version ${{ env.LATEST_VERSION }}"
-        shell: bash
-
-      - name: Push changes
-        run: |
+          git commit -m "Decrypted binary for version ${{ steps.version.outputs.version }}"
           git push
+        shell: bash
