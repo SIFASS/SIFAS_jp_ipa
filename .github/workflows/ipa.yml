@@ -152,6 +152,15 @@ jobs:
           cat ${{ env.appName }}.ipa.* > ${{ runner.temp }}/${{ env.appName }}.ipa
           rm ${{ env.appName }}.ipa.*
 
+      #- name: Setup tmate session
+      #  uses: mxschmitt/action-tmate@v3
+      #  env:
+      #    DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
+      #    DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
+      
+      - name: Extract Metadata
+        run: unzip -j ${{ runner.temp }}/${{ env.appName }}.ipa "Payload/${{ env.appName }}.app/Data/Managed/Metadata/global-metadata.dat" -d "."
+
       - name: Decrypt binary
         env:
           DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
@@ -175,12 +184,12 @@ jobs:
       - name: Commit binary file & Push
         run: |
           cd "$(pwd)/SIFAS_jp_bin"
-          cp ../${{ env.appName }} .
+          cp ../${{ env.appName }} ../global-metadata.dat .
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git lfs install
           git lfs track
-          git add ${{ env.appName }}
+          git add ${{ env.appName }} global-metadata.dat
           git commit -m "Decrypted binary for version ${{ steps.version.outputs.version }}"
           git push
         shell: bash
