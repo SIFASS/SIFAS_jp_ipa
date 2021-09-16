@@ -179,11 +179,11 @@ jobs:
 
       - name: Set up gitlab repository
         run: |
-          git clone git@gitlab.com:SIFASS/SIFAS_jp_bin.git "$(pwd)/SIFAS_jp_bin"
+          git clone git@gitlab.com:SIFASS/SIFAS_jp_bin.git SIFAS_jp_bin
 
       - name: Commit binary file & Push
         run: |
-          cd "$(pwd)/SIFAS_jp_bin"
+          cd SIFAS_jp_bin
           cp ../${{ env.appName }} ../global-metadata.dat .
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -192,4 +192,14 @@ jobs:
           git add ${{ env.appName }} global-metadata.dat
           git commit -m "Decrypted binary for version ${{ steps.version.outputs.version }}"
           git push
+        shell: bash
+      
+      - name: Notify binary stub repository
+        run: |
+          git clone git@github.com:SIFASS/SIFAS_jp_bin_stub.git SIFAS_jp_bin_stub
+          cd SIFAS_jp_bin_stub
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git tag "sifas-jp-${{ steps.version.outputs.version }}"
+          git push origin --tags
         shell: bash
