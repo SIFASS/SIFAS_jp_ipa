@@ -7,7 +7,7 @@ import time
 import requests
 from io import BytesIO
 from hashlib import sha256
-from zipfile import ZipFile
+from zipfile import ZipFile, Path
 
 
 ipa_file = sys.argv[1]
@@ -38,9 +38,8 @@ with ZipFile(ipa_file, 'r') as ipa:
                     nf.write(f.read())
         addfile("Payload/{}.app/Info.plist".format(app_name))
         addfile("Payload/{}.app/{}".format(app_name, binary_name))
-        for path, dirs, files in os.walk("Payload/{}.app/SC_Info".format(app_name)):
-            for fn in files:
-                addfile("{}/{}".format(path, fn))
+        for path in Path(ipa, "Payload/{}.app/SC_Info/".format(app_name)).iterdir():
+            addfile(path.at)
 
     bundleID = "{}/{}.app/{}".format(identifier, app_name, binary_name)
 
