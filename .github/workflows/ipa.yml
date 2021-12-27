@@ -18,12 +18,15 @@ on:
       unk:
   repository_dispatch:
 
+concurrency: 
+  group: sif-updater
+
 jobs:
   ipa_update:
     name: 'Update IPA'
     runs-on: "ubuntu-latest"
     outputs:
-      NEED_UPDATE: ${{ steps.check.outputs.NEED_UPDATE }}
+      NEED_DECRYPT: ${{ steps.check.outputs.NEED_DECRYPT }}
     steps:
       - name: Set up git repository
         uses: actions/checkout@v2
@@ -38,12 +41,18 @@ jobs:
         id: check
         run: |
             pip3 install requests
-            if python3 workflow_helper/precheck_version.py ${{ env.appStore }} ${{ env.appBundleId }}; then
+            if [[ "$(cat curver.txt)" != "$(cat decver.txt)" ]]; then
+                echo "Last decryption failed! Directly go to decryption phase!"
+                echo '::set-output name=NEED_DECRYPT::1'
+                echo '::set-output name=NEED_UPDATE::0'
+            elif python3 workflow_helper/precheck_version.py ${{ env.appStore }} ${{ env.appBundleId }}; then
                 echo "Version updated! Continue to download!"
                 echo '::set-output name=NEED_UPDATE::1'
+                echo '::set-output name=NEED_DECRYPT::1'
             else
                 echo "Version unchanged! Relax~"
                 echo '::set-output name=NEED_UPDATE::0'
+                echo '::set-output name=NEED_DECRYPT::0'
             fi
         shell: bash
       
@@ -114,7 +123,7 @@ jobs:
           branch: ${{ github.ref }}
 
   binary_decrypt:
-    if: ${{ needs.ipa_update.outputs.NEED_UPDATE == 1 }}
+    if: ${{ needs.ipa_update.outputs.NEED_DECRYPT == 1 }}
     name: 'Decrypt Binary'
     runs-on: "ubuntu-20.04"
     needs:
@@ -203,3 +212,17 @@ jobs:
           git tag "sifas-jp-${{ steps.version.outputs.version }}"
           git push origin --tags
         shell: bash
+
+      - name: Commit decrypted ver change
+        run: |
+          cp curver.txt decver.txt
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add decver.txt
+          git commit -m "Decrypting app of ver ${{ steps.curver.outputs.curver }}" -a
+        shell: bash
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
