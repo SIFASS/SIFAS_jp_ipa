@@ -15,7 +15,10 @@ on:
     - cron: '30 * * * *'
   workflow_dispatch:
     inputs:
-      unk:
+      debug_enabled:
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false
   repository_dispatch:
 
 concurrency: 
@@ -34,8 +37,12 @@ jobs:
         run: |
             git clone https://github.com/NyaMisty/ipatool-py
             pip3 install -r ipatool-py/requirements.txt
-      #- name: Setup tmate session
-      #  uses: mxschmitt/action-tmate@v3
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug_enabled }}
+        env:
+          SECRETS_CONTEXT: ${{ toJson(secrets) }}
 
       - name: Pre check version
         id: check
@@ -137,6 +144,13 @@ jobs:
       - name: Get current version
         id: version
         run: echo "::set-output name=version::$(cat curver.txt)"
+
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug_enabled }}
+        env:
+          SECRETS_CONTEXT: ${{ toJson(secrets) }}
 
       - id: download-ipa-000
         name: Download ipa 000
