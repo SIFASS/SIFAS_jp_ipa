@@ -175,21 +175,30 @@ jobs:
           cat ${{ env.appName }}.ipa.* > ${{ runner.temp }}/${{ env.appName }}.ipa
           rm ${{ env.appName }}.ipa.*
 
-      #- name: Setup tmate session
-      #  uses: mxschmitt/action-tmate@v3
-      #  env:
-      #    DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
-      #    DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        env:
+          NEW_DECRYPT_SERVER: ${{ secrets.NEW_DECRYPT_SERVER }}
+        with:
+          detached: true
       
       - name: Extract Metadata
         run: unzip -j ${{ runner.temp }}/${{ env.appName }}.ipa "Payload/${{ env.appName }}.app/Data/Managed/Metadata/global-metadata.dat" -d "."
 
+      - name: Setup Chfs File Server
+        run: |
+          sudo wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+          sudo chmod +x /usr/local/bin/cloudflared
+          sudo cloudflared service install ${{ secrets.CLODUFLARED_CONFIG }}
+          (cd /tmp; wget https://github.com/PlexPt/chfs-file-server/raw/main/download/chfs-linux-amd64-2.0.zip -O chfs.zip && unzip chfs.zip && chmod +x chfs)
+          sudo nohup /tmp/chfs --port 8080 --path / &
+
       - name: Decrypt binary
         env:
-          DECRYPT_SERVER: ${{ secrets.DECRYPT_SERVER }}
-          DECRYPT_SERVER_TOKEN: ${{ secrets.DECRYPT_SERVER_TOKEN }}
+          NEW_DECRYPT_SERVER: ${{ secrets.NEW_DECRYPT_SERVER }}
         run: |
           python3 workflow_helper/decrypt_binary.py ${{ runner.temp }}/${{ env.appName }}.ipa
+          tar xvf dec.tar
 
       - name: Setup SSH Key
         env:
@@ -207,7 +216,7 @@ jobs:
       - name: Commit binary file & Push
         run: |
           cd SIFAS_jp_bin
-          cp ../${{ env.appName }} ../global-metadata.dat .
+          cp ../Payload/${{ env.appName }}.app/${{ env.appName }} ../global-metadata.dat .
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git lfs install
